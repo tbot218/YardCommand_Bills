@@ -1,69 +1,53 @@
 document.addEventListener("DOMContentLoaded", async () => {
+  const calendarEl = document.getElementById("calendar");
 
-  // --------------------------------------------------
-  // Elements
-  // --------------------------------------------------
-  const calEl = document.getElementById("calendar");
+  const titleInput = document.getElementById("title");
+  const dueDateInput = document.getElementById("due_date");
+  const amountInput = document.getElementById("amount");
+  const notesInput = document.getElementById("notes");
   const addBtn = document.getElementById("addBtn");
 
+  // Recurrence checkboxes
+  const repeatMonthly = document.getElementById("repeatMonthly");
+  const repeat4Weeks = document.getElementById("repeat4Weeks");
+
+  // Modal elements
   const modal = document.getElementById("billModal");
+  const modalTitle = document.getElementById("modalTitle");
+  const modalDueDate = document.getElementById("modalDueDate");
+  const modalAmount = document.getElementById("modalAmount");
+  const modalNotes = document.getElementById("modalNotes");
   const closeModalBtn = document.getElementById("closeModalBtn");
   const saveModalBtn = document.getElementById("saveModalBtn");
   const removeBillBtn = document.getElementById("removeBillBtn");
 
-  // --------------------------------------------------
-  // State
-  // --------------------------------------------------
-  let activeBillId = null;
+  let selectedEvent = null;
 
-  // --------------------------------------------------
-  // Helpers
-  // --------------------------------------------------
-  function normalizeDate(dateStr) {
-    if (!dateStr) return null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  // ---------------------------------------
+  // Checkbox locking (mutually exclusive)
+  // ---------------------------------------
+  repeatMonthly.addEventListener("change", () => {
+    if (repeatMonthly.checked) repeat4Weeks.checked = false;
+  });
 
-    const parts = dateStr.split("/");
-    if (parts.length === 3) {
-      const [dd, mm, yyyy] = parts;
-      return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
-    }
-    return dateStr;
-  }
+  repeat4Weeks.addEventListener("change", () => {
+    if (repeat4Weeks.checked) repeatMonthly.checked = false;
+  });
 
-  async function fetchBills() {
-    const res = await fetch("/bills");
-    if (!res.ok) throw new Error("Failed to fetch bills");
-    return await res.json();
-  }
-
-  function billsToEvents(bills) {
-    return bills.map(b => ({
-      id: String(b.id),
-      title: b.amount ? `${b.name} ($${b.amount})` : b.name,
-      start: b.due_date,
-      allDay: true,
-      extendedProps: { ...b }
-    }));
-  }
-
-  // --------------------------------------------------
-  // Calendar
-  // --------------------------------------------------
-  const calendar = new FullCalendar.Calendar(calEl, {
+  // ---------------------------------------
+  // Calendar init
+  // ---------------------------------------
+  const calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: "dayGridMonth",
     height: "auto",
-    events: [],
 
     eventClick: (info) => {
-      const b = info.event.extendedProps;
+      selectedEvent = info.event;
 
-      activeBillId = info.event.id;
-
-      document.getElementById("modalTitle").value = b.name || "";
-      document.getElementById("modalDueDate").value = b.due_date || "";
-      document.getElementById("modalAmount").value = b.amount ?? "";
-      document.getElementById("modalNotes").value = b.notes || "";
+      modalTitle.value = info.event.title;
+      modalDueDate.value = info.event.startStr;
+      modalAmount.value = info.event.extendedProps.amount || "";
+      modalNotes.value = info.event.extendedProps.notes || "";
 
       modal.style.display = "block";
     }
@@ -71,30 +55,55 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   calendar.render();
 
-  async function refreshCalendar() {
-    const bills = await fetchBills();
+  // ---------------------------------------
+  // Load bills from backend
+  // ---------------------------------------
+  async function loadBills() {
+    const res = await fetch("/bills");
+    const bills = await res.json();
+
     calendar.removeAllEvents();
-    calendar.addEventSource(billsToEvents(bills));
+
+    bills.forEach(bill => {
+      calendar.addEvent({
+        id: bill.id,
+        title: bill.name,
+        start: bill.due_date,
+        allDay: true,
+        extendedProps: {
+          amount: bill.amount,
+          notes: bill.notes
+        }
+      });
+    });
   }
 
-  // --------------------------------------------------
-  // Add Bill (POST)
-  // --------------------------------------------------
+  await loadBills();
+
+  // ---------------------------------------
+  // Add Bill
+  // ---------------------------------------
   addBtn.addEventListener("click", async () => {
+    const name = titleInput.value.trim();
+    const due_date = dueDateInput.value;
+    const amount = parseFloat(amountInput.value);
+
+    if (!name || !due_date || isNaN(amount)) {
+      alert("Please fill in title, due date, and amount.");
+      return;
+    }
+
     const payload = {
-      name: document.getElementById("title").value.trim(),
-      due_date: normalizeDate(document.getElementById("due_date").value),
-      amount: parseFloat(document.getElementById("amount").value),
+      name: name,
+      due_date: due_date,
+      amount: amount,
       frequency: "monthly",
       category: "business",
       gst_credit: true,
-      notes: document.getElementById("notes").value.trim()
+      notes: notesInput.value.trim(),
+      repeat_monthly: repeatMonthly.checked,
+      repeat_4weeks: repeat4Weeks.checked
     };
-
-    if (!payload.name || !payload.due_date) {
-      alert("Name and due date are required");
-      return;
-    }
 
     const res = await fetch("/bills", {
       method: "POST",
@@ -103,81 +112,77 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     if (!res.ok) {
-      alert(await res.text());
+      alert("Failed to add bill.");
       return;
     }
 
-    await refreshCalendar();
+    // Reset form
+    titleInput.value = "";
+    dueDateInput.value = "";
+    amountInput.value = "";
+    notesInput.value = "";
+    repeatMonthly.checked = false;
+    repeat4Weeks.checked = false;
+
+    await loadBills();
   });
 
-  // --------------------------------------------------
-  // Save Bill (PUT)
-  // --------------------------------------------------
+  // ---------------------------------------
+  // Close modal
+  // ---------------------------------------
+  closeModalBtn.addEventListener("click", () => {
+    modal.style.display = "none";
+    selectedEvent = null;
+  });
+
+  // ---------------------------------------
+  // Save edits (requires PUT backend)
+  // ---------------------------------------
   saveModalBtn.addEventListener("click", async () => {
-    if (!activeBillId) return;
+    if (!selectedEvent) return;
 
     const payload = {
-      name: document.getElementById("modalTitle").value.trim(),
-      due_date: normalizeDate(document.getElementById("modalDueDate").value),
-      amount: parseFloat(document.getElementById("modalAmount").value),
-      notes: document.getElementById("modalNotes").value.trim()
+      name: modalTitle.value.trim(),
+      due_date: modalDueDate.value,
+      amount: parseFloat(modalAmount.value),
+      notes: modalNotes.value.trim()
     };
 
-    const res = await fetch(`/bills/${activeBillId}`, {
+    const res = await fetch(`/bills/${selectedEvent.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
 
     if (!res.ok) {
-      alert("Save failed:\n" + await res.text());
+      alert("Failed to save changes.");
       return;
     }
 
     modal.style.display = "none";
-    activeBillId = null;
-    await refreshCalendar();
+    selectedEvent = null;
+    await loadBills();
   });
 
-  // --------------------------------------------------
-  // Remove Bill (DELETE)
-  // --------------------------------------------------
+  // ---------------------------------------
+  // Remove bill (soft delete)
+  // ---------------------------------------
   removeBillBtn.addEventListener("click", async () => {
-    if (!activeBillId) return;
+    if (!selectedEvent) return;
 
-    if (!confirm("Are you sure you want to remove this bill?")) return;
+    if (!confirm("Remove this bill?")) return;
 
-    const res = await fetch(`/bills/${activeBillId}`, {
+    const res = await fetch(`/bills/${selectedEvent.id}`, {
       method: "DELETE"
     });
 
     if (!res.ok) {
-      alert("Remove failed");
+      alert("Failed to remove bill.");
       return;
     }
 
     modal.style.display = "none";
-    activeBillId = null;
-    await refreshCalendar();
+    selectedEvent = null;
+    await loadBills();
   });
-
-  // --------------------------------------------------
-  // Close Modal
-  // --------------------------------------------------
-  closeModalBtn.addEventListener("click", () => {
-    modal.style.display = "none";
-    activeBillId = null;
-  });
-
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal) {
-      modal.style.display = "none";
-      activeBillId = null;
-    }
-  });
-
-  // --------------------------------------------------
-  // Initial load
-  // --------------------------------------------------
-  await refreshCalendar();
 });

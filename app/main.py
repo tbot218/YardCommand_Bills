@@ -3,6 +3,9 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from datetime import timedelta
+
+from dateutil.relativedelta import relativedelta
 
 from app.bills import Bill, Base
 from app.database import engine, get_db
@@ -35,7 +38,7 @@ def calendar_view(request: Request):
 # API — Bills
 # --------------------------------------------------
 
-# GET all active bills
+# GET — all active bills
 @app.get("/bills", response_model=list[BillOut])
 def list_bills(db: Session = Depends(get_db)):
     return (
@@ -46,24 +49,43 @@ def list_bills(db: Session = Depends(get_db)):
     )
 
 
-# POST — create bill
-@app.post("/bills", response_model=BillOut)
+# POST — create bill (+ optional recurrence)
+@app.post("/bills", response_model=list[BillOut])
 def create_bill(payload: BillCreate, db: Session = Depends(get_db)):
-    new_bill = Bill(
-        name=payload.name,
-        due_date=payload.due_date,
-        amount=payload.amount,
-        frequency=payload.frequency,
-        category=payload.category,
-        gst_credit=payload.gst_credit,
-        notes=payload.notes,
-        active=True,
-    )
+    created: list[Bill] = []
 
-    db.add(new_bill)
+    def create_one(due_date):
+        bill = Bill(
+            name=payload.name,
+            due_date=due_date,
+            amount=payload.amount,
+            frequency=payload.frequency,
+            category=payload.category,
+            gst_credit=payload.gst_credit,
+            notes=payload.notes,
+            active=True,
+        )
+        db.add(bill)
+        db.flush()
+        created.append(bill)
+
+    # Always create the first bill
+    create_one(payload.due_date)
+
+    # Recurrence: same date every month (12 months total)
+    if payload.repeat_monthly:
+        for i in range(1, 12):
+            create_one(payload.due_date + relativedelta(months=i))
+
+    # Recurrence: every 4 weeks (28-day cadence)
+    elif payload.repeat_4weeks:
+        d = payload.due_date
+        for _ in range(1, 13):
+            d = d + timedelta(days=28)
+            create_one(d)
+
     db.commit()
-    db.refresh(new_bill)
-    return new_bill
+    return created
 
 
 # PUT — update bill (Save button)
