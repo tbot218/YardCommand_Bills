@@ -84,6 +84,12 @@
       display: flex;
       justify-content: flex-end;
       margin-top: 15px;
+      gap: 10px;
+    }
+
+    .btn-danger {
+      background: #c0392b;
+      color: #fff;
     }
   </style>
 </head>
@@ -107,7 +113,7 @@
   <!-- Modal -->
   <div id="billModal">
     <div class="modal-content">
-      <h3>Edit Bill (UI only)</h3>
+      <h3>Edit Bill</h3>
 
       <label>Title</label>
       <input id="modalTitle" />
@@ -122,6 +128,8 @@
       <input id="modalNotes" />
 
       <div class="modal-actions">
+        <button id="removeBillBtn" class="btn-danger">Remove Bill</button>
+        <button id="saveModalBtn">Save</button>
         <button id="closeModalBtn">Close</button>
       </div>
     </div>

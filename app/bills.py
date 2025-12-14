@@ -16,3 +16,18 @@ class Bill(Base):
     gst_credit = Column(Boolean, default=True)
     notes = Column(String, default="")
     active = Column(Boolean, default=True)
+
+# --- recurrence metadata (v1, optional) ---
+is_recurring = Column(Boolean, nullable=False, default=False)
+
+recurrence_type = Column(String, nullable=True)
+# "fixed_day" | "nth_weekday" | "business_day"
+
+recurrence_value = Column(String, nullable=True)
+# examples:
+# "15"
+# "1:monday"
+# "first_business_day"
+
+recurrence_interval_months = Column(Integer, nullable=True)
+# 1 = monthly, 3 = quarterly
