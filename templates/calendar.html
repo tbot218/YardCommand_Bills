@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Yard Command — Bills Calendar</title>
+
+  <!-- FullCalendar -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css">
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #f7f7f7;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    #calendar {
+      max-width: 1100px;
+      margin: 20px auto;
+      background: #fff;
+      padding: 10px;
+      border-radius: 6px;
+    }
+
+    .panel {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 15px;
+      border-radius: 6px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 2fr auto;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    input {
+      padding: 8px;
+    }
+
+    button {
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    /* Modal */
+    #billModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 1000;
+    }
+
+    #billModal .modal-content {
+      background: #fff;
+      max-width: 500px;
+      margin: 10% auto;
+      padding: 20px;
+      border-radius: 6px;
+    }
+
+    #billModal label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+
+    #billModal input {
+      width: 100%;
+      padding: 8px;
+      margin-top: 4px;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 15px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="panel">
+    <h1>Bills Calendar</h1>
+
+    <!-- Add Bill -->
+    <div class="row">
+      <input id="title" placeholder="Bill title" />
+      <input id="due_date" type="date" />
+      <input id="amount" placeholder="Amount" />
+      <input id="notes" placeholder="Notes" />
+      <button id="addBtn">Add</button>
+    </div>
+  </div>
+
+  <div id="calendar"></div>
+
+  <!-- Modal -->
+  <div id="billModal">
+    <div class="modal-content">
+      <h3>Edit Bill (UI only)</h3>
+
+      <label>Title</label>
+      <input id="modalTitle" />
+
+      <label>Due Date</label>
+      <input id="modalDueDate" type="date" />
+
+      <label>Amount</label>
+      <input id="modalAmount" />
+
+      <label>Notes</label>
+      <input id="modalNotes" />
+
+      <div class="modal-actions">
+        <button id="closeModalBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+  <script defer src="{{ url_for('static', path='calendar.js') }}"></script>
+
+</body>
+</html>
