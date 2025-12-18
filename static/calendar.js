@@ -1,4 +1,4 @@
-console.log("calendar.js loaded");
+console.log("calendar.js loaded (non-cumulative monthly totals)");
 
 document.addEventListener("DOMContentLoaded", async () => {
 
@@ -25,10 +25,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   const saveModalBtn = document.getElementById("saveModalBtn");
   const removeBillBtn = document.getElementById("removeBillBtn");
 
+  const weeklyEl = document.getElementById("weekly-total");
+  const monthlyEl = document.getElementById("monthly-total");
+
   let selectedEvent = null;
+  let calendar = null;
 
   // --------------------------------------------------
-  // Checkbox locking
+  // Checkbox locking (mutually exclusive)
   // --------------------------------------------------
   repeatMonthly.addEventListener("change", () => {
     if (repeatMonthly.checked) repeat4Weeks.checked = false;
@@ -39,11 +43,66 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   // --------------------------------------------------
-  // Calendar init
+  // VIEW-DRIVEN TOTALS (NON-CUMULATIVE)
   // --------------------------------------------------
-  const calendar = new FullCalendar.Calendar(calendarEl, {
+  async function loadTotalsForDate(referenceDate) {
+    if (!referenceDate) return;
+
+    const isoDate = referenceDate.toISOString().slice(0, 10);
+    console.log("Loading totals for view date:", isoDate);
+
+    // -------- Weekly --------
+    try {
+      const weeklyRes = await fetch(`/totals/weekly?date=${isoDate}`);
+      const weeklyData = await weeklyRes.json();
+
+      const weekKey = weeklyData.current_week;
+      const weekTotal = weeklyData.totals?.[weekKey] ?? 0;
+
+      if (weeklyEl) {
+        weeklyEl.innerText = `$${weekTotal.toFixed(2)}`;
+      }
+    } catch (err) {
+      console.error("Weekly totals failed:", err);
+    }
+
+    // -------- Monthly (STRICT: ONE MONTH ONLY) --------
+    try {
+      const monthlyRes = await fetch(`/totals/monthly?date=${isoDate}`);
+      const monthlyData = await monthlyRes.json();
+
+      const monthKey = monthlyData.current_month;
+
+      // IMPORTANT: overwrite value, never accumulate
+      let monthTotal = 0;
+      if (
+        monthlyData.totals &&
+        Object.prototype.hasOwnProperty.call(monthlyData.totals, monthKey)
+      ) {
+        monthTotal = monthlyData.totals[monthKey];
+      }
+
+      console.log("Monthly key:", monthKey, "value:", monthTotal);
+
+      if (monthlyEl) {
+        monthlyEl.innerText = `$${monthTotal.toFixed(2)}`;
+      }
+    } catch (err) {
+      console.error("Monthly totals failed:", err);
+    }
+  }
+
+  // --------------------------------------------------
+  // Calendar (SOURCE OF TRUTH)
+  // --------------------------------------------------
+  calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: "dayGridMonth",
     height: "auto",
+
+    datesSet: (info) => {
+      console.log("datesSet fired →", info.startStr);
+      loadTotalsForDate(info.start);
+    },
 
     eventClick: (info) => {
       selectedEvent = info.event;
@@ -60,7 +119,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   calendar.render();
 
   // --------------------------------------------------
-  // Load bills
+  // Load bills into calendar
   // --------------------------------------------------
   async function loadBills() {
     const res = await fetch("/bills");
@@ -83,44 +142,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // --------------------------------------------------
-  // Load totals (weekly + monthly)
-  // --------------------------------------------------
-  async function loadTotals() {
-    try {
-      // Weekly
-      const weeklyRes = await fetch("/totals/weekly");
-      const weeklyData = await weeklyRes.json();
-
-      const weekKey = weeklyData.current_week;
-      const weekTotal = weeklyData.totals?.[weekKey] ?? 0;
-
-      const weeklyEl = document.getElementById("weekly-total");
-      if (weeklyEl) {
-        weeklyEl.innerText = `$${weekTotal.toFixed(2)}`;
-      }
-
-      // Monthly
-      const monthlyRes = await fetch("/totals/monthly");
-      const monthlyData = await monthlyRes.json();
-
-      const monthKey = monthlyData.current_month;
-      const monthTotal = monthlyData.totals?.[monthKey] ?? 0;
-
-      const monthlyEl = document.getElementById("monthly-total");
-      if (monthlyEl) {
-        monthlyEl.innerText = `$${monthTotal.toFixed(2)}`;
-      }
-
-    } catch (err) {
-      console.error("Failed to load totals:", err);
-    }
-  }
-
-  // --------------------------------------------------
-  // Initial load (order matters)
+  // Initial load
   // --------------------------------------------------
   await loadBills();
-  await loadTotals();
+  loadTotalsForDate(calendar.getDate());
 
   // --------------------------------------------------
   // Add bill
@@ -166,7 +191,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     repeat4Weeks.checked = false;
 
     await loadBills();
-    await loadTotals();
+    loadTotalsForDate(calendar.getDate());
   });
 
   // --------------------------------------------------
@@ -202,7 +227,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     selectedEvent = null;
 
     await loadBills();
-    await loadTotals();
+    loadTotalsForDate(calendar.getDate());
   });
 
   removeBillBtn.addEventListener("click", async () => {
@@ -222,7 +247,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     selectedEvent = null;
 
     await loadBills();
-    await loadTotals();
+    loadTotalsForDate(calendar.getDate());
   });
 
 });

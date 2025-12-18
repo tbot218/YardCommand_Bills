@@ -1,10 +1,13 @@
 print(">>> CONFIRMED: YardCommand_Bills app/main.py is running <<<")
-from fastapi import FastAPI, Depends, Request, HTTPException
+
+from datetime import date, timedelta
+from typing import Optional
+
+from fastapi import FastAPI, Depends, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from datetime import date, timedelta
 
 from dateutil.relativedelta import relativedelta
 
@@ -40,7 +43,6 @@ def calendar_view(request: Request):
 # --------------------------------------------------
 # API — Bills
 # --------------------------------------------------
-
 @app.get("/bills", response_model=list[BillOut])
 def list_bills(db: Session = Depends(get_db)):
     return (
@@ -70,10 +72,10 @@ def create_bill(payload: BillCreate, db: Session = Depends(get_db)):
         db.flush()
         created.append(bill)
 
-    # Always create first bill
+    # First bill
     create_one(payload.due_date)
 
-    # Monthly recurrence (12 months)
+    # Monthly recurrence
     if payload.repeat_monthly:
         for i in range(1, 12):
             create_one(payload.due_date + relativedelta(months=i))
@@ -121,13 +123,9 @@ def remove_bill(bill_id: int, db: Session = Depends(get_db)):
 
 
 # --------------------------------------------------
-# API — Totals (Phase 3)
+# Helpers
 # --------------------------------------------------
-
 def _load_active_bills(db: Session):
-    """
-    Convert Bill ORM rows into recurrence-compatible dicts.
-    """
     bills = (
         db.query(Bill)
         .filter(Bill.active == True)
@@ -138,25 +136,32 @@ def _load_active_bills(db: Session):
         {
             "id": b.id,
             "amount": float(b.amount),
-            "recurrence": b.frequency,   # string or dict
+            "recurrence": b.frequency,
             "start_date": b.due_date,
-            "user": "default",           # future-ready
+            "user": "default",
         }
         for b in bills
     ]
 
 
+# --------------------------------------------------
+# API — Totals (VIEW-DRIVEN, FIXED)
+# --------------------------------------------------
 @app.get("/totals/weekly")
-def get_weekly_totals(db: Session = Depends(get_db)):
-    today = date.today()
-    start = today - timedelta(days=30)
-    end = today + timedelta(days=90)
+def get_weekly_totals(
+    view_date: Optional[str] = Query(default=None, alias="date"),
+    db: Session = Depends(get_db),
+):
+    ref_date = date.fromisoformat(view_date) if view_date else date.today()
+
+    start = ref_date - timedelta(days=30)
+    end = ref_date + timedelta(days=90)
 
     bills = _load_active_bills(db)
     instances = expand_bills_to_instances(bills, start, end)
     totals = compute_weekly_totals(instances)
 
-    year, week, _ = today.isocalendar()
+    year, week, _ = ref_date.isocalendar()
     current_key = f"{year}-W{week:02d}"
 
     return {
@@ -166,16 +171,20 @@ def get_weekly_totals(db: Session = Depends(get_db)):
 
 
 @app.get("/totals/monthly")
-def get_monthly_totals(db: Session = Depends(get_db)):
-    today = date.today()
-    start = today.replace(day=1)
-    end = today + relativedelta(months=3)
+def get_monthly_totals(
+    view_date: Optional[str] = Query(default=None, alias="date"),
+    db: Session = Depends(get_db),
+):
+    ref_date = date.fromisoformat(view_date) if view_date else date.today()
+
+    start = ref_date.replace(day=1)
+    end = ref_date + relativedelta(months=3)
 
     bills = _load_active_bills(db)
     instances = expand_bills_to_instances(bills, start, end)
     totals = compute_monthly_totals(instances)
 
-    current_key = f"{today.year}-{today.month:02d}"
+    current_key = f"{ref_date.year}-{ref_date.month:02d}"
 
     return {
         "current_month": current_key,
