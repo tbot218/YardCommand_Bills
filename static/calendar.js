@@ -1,4 +1,10 @@
+console.log("calendar.js loaded");
+
 document.addEventListener("DOMContentLoaded", async () => {
+
+  // --------------------------------------------------
+  // DOM references
+  // --------------------------------------------------
   const calendarEl = document.getElementById("calendar");
 
   const titleInput = document.getElementById("title");
@@ -7,11 +13,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   const notesInput = document.getElementById("notes");
   const addBtn = document.getElementById("addBtn");
 
-  // Recurrence checkboxes
   const repeatMonthly = document.getElementById("repeatMonthly");
   const repeat4Weeks = document.getElementById("repeat4Weeks");
 
-  // Modal elements
   const modal = document.getElementById("billModal");
   const modalTitle = document.getElementById("modalTitle");
   const modalDueDate = document.getElementById("modalDueDate");
@@ -23,9 +27,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   let selectedEvent = null;
 
-  // ---------------------------------------
-  // Checkbox locking (mutually exclusive)
-  // ---------------------------------------
+  // --------------------------------------------------
+  // Checkbox locking
+  // --------------------------------------------------
   repeatMonthly.addEventListener("change", () => {
     if (repeatMonthly.checked) repeat4Weeks.checked = false;
   });
@@ -34,9 +38,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (repeat4Weeks.checked) repeatMonthly.checked = false;
   });
 
-  // ---------------------------------------
+  // --------------------------------------------------
   // Calendar init
-  // ---------------------------------------
+  // --------------------------------------------------
   const calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: "dayGridMonth",
     height: "auto",
@@ -55,9 +59,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   calendar.render();
 
-  // ---------------------------------------
-  // Load bills from backend
-  // ---------------------------------------
+  // --------------------------------------------------
+  // Load bills
+  // --------------------------------------------------
   async function loadBills() {
     const res = await fetch("/bills");
     const bills = await res.json();
@@ -78,11 +82,49 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  await loadBills();
+  // --------------------------------------------------
+  // Load totals (weekly + monthly)
+  // --------------------------------------------------
+  async function loadTotals() {
+    try {
+      // Weekly
+      const weeklyRes = await fetch("/totals/weekly");
+      const weeklyData = await weeklyRes.json();
 
-  // ---------------------------------------
-  // Add Bill
-  // ---------------------------------------
+      const weekKey = weeklyData.current_week;
+      const weekTotal = weeklyData.totals?.[weekKey] ?? 0;
+
+      const weeklyEl = document.getElementById("weekly-total");
+      if (weeklyEl) {
+        weeklyEl.innerText = `$${weekTotal.toFixed(2)}`;
+      }
+
+      // Monthly
+      const monthlyRes = await fetch("/totals/monthly");
+      const monthlyData = await monthlyRes.json();
+
+      const monthKey = monthlyData.current_month;
+      const monthTotal = monthlyData.totals?.[monthKey] ?? 0;
+
+      const monthlyEl = document.getElementById("monthly-total");
+      if (monthlyEl) {
+        monthlyEl.innerText = `$${monthTotal.toFixed(2)}`;
+      }
+
+    } catch (err) {
+      console.error("Failed to load totals:", err);
+    }
+  }
+
+  // --------------------------------------------------
+  // Initial load (order matters)
+  // --------------------------------------------------
+  await loadBills();
+  await loadTotals();
+
+  // --------------------------------------------------
+  // Add bill
+  // --------------------------------------------------
   addBtn.addEventListener("click", async () => {
     const name = titleInput.value.trim();
     const due_date = dueDateInput.value;
@@ -94,9 +136,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const payload = {
-      name: name,
-      due_date: due_date,
-      amount: amount,
+      name,
+      due_date,
+      amount,
       frequency: "monthly",
       category: "business",
       gst_credit: true,
@@ -116,7 +158,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
-    // Reset form
     titleInput.value = "";
     dueDateInput.value = "";
     amountInput.value = "";
@@ -125,19 +166,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     repeat4Weeks.checked = false;
 
     await loadBills();
+    await loadTotals();
   });
 
-  // ---------------------------------------
-  // Close modal
-  // ---------------------------------------
+  // --------------------------------------------------
+  // Modal controls
+  // --------------------------------------------------
   closeModalBtn.addEventListener("click", () => {
     modal.style.display = "none";
     selectedEvent = null;
   });
 
-  // ---------------------------------------
-  // Save edits (requires PUT backend)
-  // ---------------------------------------
   saveModalBtn.addEventListener("click", async () => {
     if (!selectedEvent) return;
 
@@ -161,15 +200,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     modal.style.display = "none";
     selectedEvent = null;
+
     await loadBills();
+    await loadTotals();
   });
 
-  // ---------------------------------------
-  // Remove bill (soft delete)
-  // ---------------------------------------
   removeBillBtn.addEventListener("click", async () => {
     if (!selectedEvent) return;
-
     if (!confirm("Remove this bill?")) return;
 
     const res = await fetch(`/bills/${selectedEvent.id}`, {
@@ -183,6 +220,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     modal.style.display = "none";
     selectedEvent = null;
+
     await loadBills();
+    await loadTotals();
   });
+
 });
