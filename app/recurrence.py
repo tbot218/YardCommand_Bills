@@ -171,3 +171,50 @@ def _next_occurrence(
         raise ValueError(f"Unknown recurrence type: {rtype}")
 
     raise TypeError("recurrence must be str or dict")
+
+from typing import List, Dict
+
+
+def expand_bills_to_instances(
+    bills: List[Dict],
+    start_date: date,
+    end_date: date,
+) -> List[Dict]:
+    """
+    Expand recurring bill rules into dated bill instances
+    between start_date and end_date (inclusive).
+
+    Each returned instance:
+    {
+        "bill_id": int,
+        "date": date,
+        "amount": float,
+        "user": str,
+    }
+    """
+
+    instances: List[Dict] = []
+
+    for bill in bills:
+        current = bill["start_date"]
+
+        # Skip bills that start after the window
+        if current > end_date:
+            continue
+
+        # Advance to the first occurrence >= start_date
+        while current < start_date:
+            current = _next_occurrence(current, bill["recurrence"])
+
+        # Generate instances within the window
+        while current <= end_date:
+            instances.append({
+                "bill_id": bill["id"],
+                "date": current,
+                "amount": bill["amount"],
+                "user": bill.get("user", "default"),
+            })
+
+            current = _next_occurrence(current, bill["recurrence"])
+
+    return instances
