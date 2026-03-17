@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from backend.api.schemas_bill import BillCreate, BillResponse
+from backend.api.schemas_bill import BillCreate, BillResponse, BillUpdate
 from backend.db import models
 from backend.db.database import get_db
 
@@ -90,6 +90,45 @@ def create_bill(
     )
 
     db.add(bill)
+    db.commit()
+    db.refresh(bill)
+
+    return bill_to_response(bill)
+
+
+@router.put("/{bill_id}", response_model=BillResponse)
+def update_bill(
+    bill_id: int,
+    payload: BillUpdate,
+    db: Session = Depends(get_db),
+):
+    bill = db.query(models.Bill).filter(models.Bill.id == bill_id).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found.")
+
+    next_issue_date = payload.issue_date or bill.issue_date
+    next_due_date = payload.due_date or bill.due_date
+    if next_due_date < next_issue_date:
+        raise HTTPException(status_code=400, detail="Due date cannot be before issue date.")
+
+    if payload.title is not None:
+        bill.title = payload.title
+
+    if payload.description is not None:
+        bill.description = payload.description
+
+    if payload.issue_date is not None:
+        bill.issue_date = payload.issue_date
+
+    if payload.due_date is not None:
+        bill.due_date = payload.due_date
+
+    if payload.amount is not None:
+        bill.amount_cents = round(payload.amount * 100)
+
+    if payload.status is not None:
+        bill.status = payload.status
+
     db.commit()
     db.refresh(bill)
 

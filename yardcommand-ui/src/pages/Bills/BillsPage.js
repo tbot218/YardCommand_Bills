@@ -78,7 +78,7 @@ function buildRepeatedDates(startDate, repeatMode) {
   return dates;
 }
 
-function buildCalendarDays(activeMonth, billsByDate) {
+function buildCalendarDays(activeMonth, billsByDate, todayKey) {
   const firstDay = getMonthStart(activeMonth);
   const startOffset = (firstDay.getDay() + 6) % 7;
   const gridStart = new Date(firstDay);
@@ -94,11 +94,12 @@ function buildCalendarDays(activeMonth, billsByDate) {
       date,
       inMonth: date.getMonth() === activeMonth.getMonth(),
       bills: billsByDate[key] || [],
+      isToday: key === todayKey,
     };
   });
 }
 
-function buildMiniMonth(year, monthIndex, billsByDate) {
+function buildMiniMonth(year, monthIndex, billsByDate, todayKey) {
   const firstDay = new Date(year, monthIndex, 1);
   const startOffset = (firstDay.getDay() + 6) % 7;
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
@@ -115,12 +116,14 @@ function buildMiniMonth(year, monthIndex, billsByDate) {
       key,
       dayNumber,
       hasBills: Boolean(billsByDate[key]?.length),
+      isToday: key === todayKey,
     };
   });
 }
 
 function BillsPage() {
   const today = new Date();
+  const todayKey = isoDate(today);
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -128,6 +131,8 @@ function BillsPage() {
   const [viewMode, setViewMode] = useState("year");
   const [activeMonth, setActiveMonth] = useState(getMonthStart(today));
   const [selectedDate, setSelectedDate] = useState(isoDate(today));
+  const [editForms, setEditForms] = useState({});
+  const [editingBillId, setEditingBillId] = useState(null);
   const [form, setForm] = useState({
     title: "",
     amount: "",
@@ -165,8 +170,8 @@ function BillsPage() {
   );
 
   const calendarDays = useMemo(
-    () => buildCalendarDays(activeMonth, billsByDate),
-    [activeMonth, billsByDate]
+    () => buildCalendarDays(activeMonth, billsByDate, todayKey),
+    [activeMonth, billsByDate, todayKey]
   );
 
   const monthlyBills = useMemo(() => {
@@ -175,14 +180,29 @@ function BillsPage() {
   }, [activeMonth, bills]);
 
   const monthlyTotal = monthlyBills.reduce((sum, bill) => sum + bill.amount, 0);
-  const selectedBills = billsByDate[selectedDate] || [];
+  const selectedBills = useMemo(() => billsByDate[selectedDate] || [], [billsByDate, selectedDate]);
+
+  useEffect(() => {
+    setEditForms(
+      selectedBills.reduce((forms, bill) => {
+        forms[bill.id] = {
+          title: bill.title,
+          amount: String(bill.amount),
+          due_date: bill.due_date,
+          description: bill.description || "",
+          status: bill.status,
+        };
+        return forms;
+      }, {})
+    );
+  }, [selectedBills]);
 
   const miniMonths = useMemo(
     () =>
       yearMonthNames.map((label, monthIndex) => ({
         label,
         monthIndex,
-        cells: buildMiniMonth(activeMonth.getFullYear(), monthIndex, billsByDate),
+        cells: buildMiniMonth(activeMonth.getFullYear(), monthIndex, billsByDate, todayKey),
         total: bills
           .filter((bill) =>
             bill.due_date.startsWith(
@@ -191,7 +211,7 @@ function BillsPage() {
           )
           .reduce((sum, bill) => sum + bill.amount, 0),
       })),
-    [activeMonth, bills, billsByDate]
+    [activeMonth, bills, billsByDate, todayKey]
   );
 
   const handleChange = (event) => {
@@ -265,6 +285,44 @@ function BillsPage() {
       setError(err.response?.data?.detail || "Could not create bill.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleEditChange = (billId, event) => {
+    const { name, value } = event.target;
+    setEditForms((current) => ({
+      ...current,
+      [billId]: {
+        ...current[billId],
+        [name]: value,
+      },
+    }));
+  };
+
+  const handleSaveBill = async (billId) => {
+    const payload = editForms[billId];
+    if (!payload) {
+      return;
+    }
+
+    setEditingBillId(billId);
+    setError("");
+
+    try {
+      await billsApi.update(billId, {
+        title: payload.title,
+        amount: Number(payload.amount),
+        due_date: payload.due_date,
+        issue_date: payload.due_date,
+        description: payload.description,
+        status: payload.status,
+      });
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.detail || "Could not save bill changes.");
+    } finally {
+      setEditingBillId(null);
     }
   };
 
@@ -356,7 +414,7 @@ function BillsPage() {
                           key={cell.key}
                           className={`${styles.miniDay} ${cell.hasBills ? styles.miniDayHot : ""}`}
                         >
-                          {cell.dayNumber}
+                          <span className={cell.isToday ? styles.todayBadge : ""}>{cell.dayNumber}</span>
                         </span>
                       ) : (
                         <span key={`${month.label}-blank-${index}`} className={styles.miniBlank} />
@@ -378,16 +436,15 @@ function BillsPage() {
               <button type="button" className={styles.navButton} onClick={() => shiftMonth(-1)}>
                 Prev Month
               </button>
+              <button type="button" className={styles.navButton} onClick={() => shiftMonth(1)}>
+                Next Month
+              </button>
             </div>
 
             <div className={styles.monthTitle}>
               <span className={styles.yearCaption}>Monthly Calendar</span>
               <strong>{formatMonth(activeMonth)}</strong>
             </div>
-
-            <button type="button" className={styles.navButton} onClick={() => shiftMonth(1)}>
-              Next Month
-            </button>
           </div>
 
           <div className={styles.weekdays}>
@@ -406,30 +463,24 @@ function BillsPage() {
                   type="button"
                   className={`${styles.dayCell} ${!day.inMonth ? styles.dayMuted : ""} ${
                     day.key === selectedDate ? styles.daySelected : ""
-                  }`}
+                  } ${day.bills.length > 0 ? styles.dayHasBills : ""} ${day.isToday ? styles.dayToday : ""}`}
                   onClick={() => {
                     setSelectedDate(day.key);
                     setViewMode("day");
                   }}
                 >
                   <div className={styles.dayHead}>
-                    <span>{day.date.getDate()}</span>
+                    <span className={day.isToday ? styles.todayBadge : ""}>{day.date.getDate()}</span>
                     {day.bills.length > 0 && <span className={styles.billCount}>{day.bills.length}</span>}
                   </div>
 
-                  <div className={styles.dayPlanner}>
-                    {Array.from({ length: 4 }, (_, rowIndex) => {
-                      const bill = day.bills[rowIndex];
-
-                      return (
-                        <div key={`${day.key}-row-${rowIndex}`} className={styles.plannerRow}>
-                          <span className={styles.plannerBox} />
-                          <span className={styles.plannerLine}>
-                            {bill ? `${bill.title} ${formatCurrency(bill.amount)}` : ""}
-                          </span>
-                        </div>
-                      );
-                    })}
+                  <div className={styles.monthBillList}>
+                    {day.bills.slice(0, 4).map((bill) => (
+                      <div key={bill.id} className={styles.monthBillItem}>
+                        <span className={styles.monthBillTitle}>{bill.title}</span>
+                        <span>{formatCurrency(bill.amount)}</span>
+                      </div>
+                    ))}
                   </div>
                 </button>
               ))}
@@ -439,7 +490,9 @@ function BillsPage() {
           <div className={styles.lowerPanels}>
             <div className={styles.dayPanel}>
               <p className={styles.kicker}>Selected Date</p>
-              <h2>{selectedDate}</h2>
+              <h2>
+                <span className={selectedDate === todayKey ? styles.todayBadge : ""}>{selectedDate}</span>
+              </h2>
               {selectedBills.length === 0 ? (
                 <p className={styles.emptyText}>No bills on this date yet.</p>
               ) : (
@@ -537,31 +590,81 @@ function BillsPage() {
               <button type="button" className={styles.navButton} onClick={() => setViewMode("month")}>
                 Back to Month
               </button>
+              <button type="button" className={styles.navButton} onClick={() => setViewMode("month")}>
+                Monthly Grid
+              </button>
             </div>
 
             <div className={styles.monthTitle}>
               <span className={styles.yearCaption}>Daily View</span>
-              <strong>{selectedDate}</strong>
+              <strong>
+                <span className={selectedDate === todayKey ? styles.todayBadge : ""}>{selectedDate}</span>
+              </strong>
             </div>
-
-            <button type="button" className={styles.navButton} onClick={() => setViewMode("month")}>
-              Monthly Grid
-            </button>
           </div>
 
           <div className={styles.dailyScene}>
             <div className={styles.dayPanel}>
-              <p className={styles.kicker}>Bills Due</p>
-              <h2>{selectedDate}</h2>
+              <p className={styles.kicker}>Bills Edit</p>
+              <h2>
+                <span className={selectedDate === todayKey ? styles.todayBadge : ""}>{selectedDate}</span>
+              </h2>
               {selectedBills.length === 0 ? (
                 <p className={styles.emptyText}>No bills on this date yet.</p>
               ) : (
                 <div className={styles.selectedList}>
                   {selectedBills.map((bill) => (
                     <article key={bill.id} className={styles.selectedCard}>
-                      <strong>{bill.title}</strong>
-                      <span>{formatCurrency(bill.amount)}</span>
-                      {bill.description && <p>{bill.description}</p>}
+                      <input
+                        name="title"
+                        value={editForms[bill.id]?.title || ""}
+                        onChange={(event) => handleEditChange(bill.id, event)}
+                        className={styles.input}
+                        placeholder="Bill title"
+                      />
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        name="amount"
+                        value={editForms[bill.id]?.amount || ""}
+                        onChange={(event) => handleEditChange(bill.id, event)}
+                        className={styles.input}
+                        placeholder="Amount"
+                      />
+                      <input
+                        type="date"
+                        name="due_date"
+                        value={editForms[bill.id]?.due_date || ""}
+                        onChange={(event) => handleEditChange(bill.id, event)}
+                        className={styles.input}
+                      />
+                      <select
+                        name="status"
+                        value={editForms[bill.id]?.status || "draft"}
+                        onChange={(event) => handleEditChange(bill.id, event)}
+                        className={styles.input}
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="sent">Sent</option>
+                        <option value="paid">Paid</option>
+                        <option value="overdue">Overdue</option>
+                      </select>
+                      <textarea
+                        name="description"
+                        value={editForms[bill.id]?.description || ""}
+                        onChange={(event) => handleEditChange(bill.id, event)}
+                        className={styles.textarea}
+                        placeholder="Notes"
+                      />
+                      <button
+                        type="button"
+                        className={styles.submitButton}
+                        onClick={() => handleSaveBill(bill.id)}
+                        disabled={editingBillId === bill.id}
+                      >
+                        {editingBillId === bill.id ? "Saving..." : "Save Bill"}
+                      </button>
                     </article>
                   ))}
                 </div>

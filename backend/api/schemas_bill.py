@@ -14,6 +14,15 @@ class BillCreate(BaseModel):
     status: str = "draft"
 
 
+class BillUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    issue_date: Optional[date] = None
+    due_date: Optional[date] = None
+    amount: Optional[float] = Field(default=None, gt=0)
+    status: Optional[str] = None
+
+
 class BillResponse(BaseModel):
     id: int
     client_id: Optional[int]
