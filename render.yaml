@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: yardcommand-api
+    runtime: python
+    rootDir: .
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DATABASE_URL
+        sync: false
+
+  - type: static
+    name: yardcommand-ui
+    rootDir: yardcommand-ui
+    buildCommand: npm ci && npm run build
+    publishPath: build
+    envVars:
+      - key: REACT_APP_API_BASE_URL
+        value: https://yardcommand-api.onrender.com

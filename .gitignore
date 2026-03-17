@@ -1,0 +1,16 @@
+.idea/
+.run/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+yardcommand-ui/node_modules/
+yardcommand-ui/build/
+
+*.db
+data/
+
+.DS_Store
+Thumbs.db

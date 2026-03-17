@@ -1,0 +1,51 @@
+.app-container {
+  text-align: center;
+  background-color: #1e1f22;
+  min-height: 100vh;
+  color: white;
+  padding: 20px;
+}
+
+.top-bar {
+  margin-bottom: 40px;
+}
+
+.top-bar h1 {
+  margin: 0;
+  font-size: 42px;
+  font-weight: bold;
+  color: #4caf50;
+}
+
+.subtitle {
+  margin: 5px 0 0 0;
+  font-size: 16px;
+  color: #cccccc;
+}
+
+.main-content h2 {
+  margin-bottom: 10px;
+  font-size: 28px;
+}
+
+.button-row {
+  margin-top: 30px;
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+
+.main-button {
+  background-color: #4caf50;
+  border: none;
+  padding: 14px 28px;
+  font-size: 16px;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.main-button:hover {
+  background-color: #45a049;
+}
