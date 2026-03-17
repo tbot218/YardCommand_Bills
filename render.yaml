@@ -11,11 +11,15 @@ services:
       - key: DATABASE_URL
         sync: false
 
-  - type: static
+  - type: web
     name: yardcommand-ui
+    runtime: static
     rootDir: yardcommand-ui
     buildCommand: npm ci && npm run build
-    publishPath: build
+    staticPublishPath: build
     envVars:
       - key: REACT_APP_API_BASE_URL
-        value: https://yardcommand-api.onrender.com
+        fromService:
+          name: yardcommand-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
