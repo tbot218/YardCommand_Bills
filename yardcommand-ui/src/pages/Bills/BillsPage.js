@@ -326,6 +326,26 @@ function BillsPage() {
     }
   };
 
+  const handleDeleteBill = async (billId) => {
+    setEditingBillId(billId);
+    setError("");
+
+    try {
+      await billsApi.delete(billId);
+      await loadData();
+      setEditForms((current) => {
+        const next = { ...current };
+        delete next[billId];
+        return next;
+      });
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.detail || "Could not delete bill.");
+    } finally {
+      setEditingBillId(null);
+    }
+  };
+
   const shiftMonth = (direction) => {
     setActiveMonth((current) => new Date(current.getFullYear(), current.getMonth() + direction, 1));
   };
@@ -664,6 +684,14 @@ function BillsPage() {
                         disabled={editingBillId === bill.id}
                       >
                         {editingBillId === bill.id ? "Saving..." : "Save Bill"}
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.deleteButton}
+                        onClick={() => handleDeleteBill(bill.id)}
+                        disabled={editingBillId === bill.id}
+                      >
+                        Delete
                       </button>
                     </article>
                   ))}

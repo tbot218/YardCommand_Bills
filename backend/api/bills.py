@@ -133,3 +133,18 @@ def update_bill(
     db.refresh(bill)
 
     return bill_to_response(bill)
+
+
+@router.delete("/{bill_id}")
+def delete_bill(
+    bill_id: int,
+    db: Session = Depends(get_db),
+):
+    bill = db.query(models.Bill).filter(models.Bill.id == bill_id).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found.")
+
+    db.delete(bill)
+    db.commit()
+
+    return {"status": "deleted", "id": bill_id}
